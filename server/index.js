@@ -27,6 +27,17 @@ app.use("/api/rooms", roomsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 
+app.use((err, req, res, next) => {
+    const errorStatus = err.status || 500
+    const errorMessage = err.message || "Something went wrong"
+    return res.status(errorStatus).json({
+        success: false,
+        status: errorStatus,
+        message: errorMessage,
+        stack: err.stack
+    });
+});
+
 
 const port = process.env.PORT || 3000
 app.listen(port, () => {
