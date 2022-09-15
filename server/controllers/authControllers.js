@@ -1,18 +1,18 @@
 import User from "../models/User.js";
-import CryptoJS from "crypto-js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { createError } from "../utils/error.js";
 
 //REGISTER CONTROLLER
 export const register = async (req, res, next) => {
     try {
+        const salt = await bcrypt.genSaltSync(10);
+        const hash = await bcrypt.hashSync(req.body.password, salt);
         const newUser = new User(
             {
                 username: req.body.username,
                 email: req.body.email,
-                password: CryptoJS.AES.encrypt(
-                    req.body.password,
-                    process.env.CRYPTOJS_SECRET_KEY
-                ).toString()
+                password: hash
             }
         );
         const savedUser = await newUser.save()
@@ -25,20 +25,19 @@ export const register = async (req, res, next) => {
 //LOGIN CONTROLLER
 export const login = async (req, res, next) => {
     try {
-        const user = User.findOne({ username: req.body.username })
-        if (!user) {
-            return next(createError(404, "User not found!"))
-        }
-        const hashedPassword = CryptoJS.AES.decrypt(
-            user.password,
-            process.env.CRYPTOJS_SECRET_KEY
-        )
-        const OriginalPassword = hashedPassword.toString(CryptoJS.enc.Utf8)
-        if (OriginalPassword !== req.body.password) {
-            return next(createError(403, "Wrong Credentials"));
-        }
-        const {password, isAdmin, ...others} = user._doc
-        res.status(200).json(...others)
+        const user = await User.findOne({ username: req.body.username })
+        if (!user) return next(createError(404, "User not found"))
+
+        const isPasswordCorrect = await bcrypt.compare(req.body.password, user.password)
+        if (!isPasswordCorrect) return next(createError(401, "Wrong password or Username"))
+
+        const accessToken = jwt.sign({
+            id: user._id,
+            isAdmin: user.isAdmin
+        },
+        process.env.JWT_SECRET_KEY,
+        { expiresIn: "30d" })
+        res.status(200).json({ id: user._id, isAdmin: user.isAdmin, accessToken})
     } catch (err) {
         next(err)
     }
